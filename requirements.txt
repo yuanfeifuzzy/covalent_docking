@@ -1,0 +1,15 @@
+cmder==3.8
+loguru==0.7.2
+meeko==0.5.0
+MolIO @ git+https://github.com/yuanfeifuzzy/MolIO.git@70c283fec78ecd4f863e9dc35862ecf4222c8ab1
+mpi4py==3.1.1
+numpy==1.26.0
+pandas==2.1.1
+Pillow==10.0.1
+python-dateutil==2.8.2
+pytz==2023.3.post1
+rdkit==2023.3.3
+scipy==1.11.3
+six==1.16.0
+tzdata==2023.3
+vstool @ git+https://github.com/yuanfeifuzzy/vstool.git@7426c9f471870ee50693429cffb593bc24ea1c0c
