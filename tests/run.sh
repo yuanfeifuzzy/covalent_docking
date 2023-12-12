@@ -9,7 +9,7 @@ covalent-docking \
   "1,2" \
   'A:TYR128' \
   --outdir /work/08944/fuzzy/share/covalent_emp1_af \
-  --nodes 4 \
+  --nodes 2 \
   --email fei.yuan@bcm.edu \
-  --partition vs-small \
-  --hold
+  --partition gpu-a100 \
+  --project CHE23039

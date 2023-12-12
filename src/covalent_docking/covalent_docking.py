@@ -5,15 +5,14 @@
 A pipeline for perform covalent docking in an easy and smart way
 """
 import gzip
-import multiprocessing
 import os
 import socket
 import argparse
 import tempfile
 import subprocess
+import multiprocessing
 from pathlib import Path
 import importlib.resources
-from multiprocessing import cpu_count
 
 import cmder
 import MolIO
@@ -38,10 +37,12 @@ parser.add_argument('--project', help='The nmme of project you would like to be 
 parser.add_argument('--hold', help='Only generate submit script but hold for submitting', action='store_true')
 
 parser.add_argument('--debug', help='Enable debug mode (for development purpose).', action='store_true')
+parser.add_argument('--verbose', help='Enable verbose mode.', action='store_true')
+parser.add_argument('--quiet', help='Enable quiet mode.', action='store_true')
 parser.add_argument('--version', version=vstool.get_version(__package__), action='version')
 
 args = parser.parse_args()
-logger = vstool.setup_logger(verbose=True)
+logger = vstool.setup_logger(verbose=args.verbose, quiet=args.quiet)
 script = importlib.resources.files(__package__) / f'{__package__}.sh'
 
 setattr(args, 'nodes', 1 if args.debug and args.nodes else args.nodes)
@@ -56,16 +57,17 @@ def submit():
 
     cmds, code, job_id = [], 0, 0
     source = f'source {Path(vstool.check_exe("python")).parent}/activate\n\n'
+    export = 'export PATH=/work/08944/fuzzy/share/software/openbabel/bin:${PATH}\n'
     cd = f'cd {args.outdir} || {{ echo "Failed to cd into {args.outdir}!"; exit 1; }}\n'
 
     cmd = ['batch-ligand', str(args.ligand), str(args.receptor), f"'{args.smarts}'", f"'{args.indices}'",
            f"'{args.residue}'", str(args.outdir), f'--batch {args.batches or ntasks * 8}']
     if args.debug:
         cmd.append('--debug')
-    cmd = source + cd + ' \\\n  '.join(cmd)
+    cmd = export + source + cd + ' \\\n  '.join(cmd)
     cmds.append(f'{cmd}\n')
 
-    lcmd = ['module load launcher_gpu', 'export LAUNCHER_WORKDIR={outdir}',
+    lcmd = ['module load launcher', 'export LAUNCHER_WORKDIR={outdir}',
             'export LAUNCHER_JOB_FILE={outdir}/{job}.commands.txt', '"${{LAUNCHER_DIR}}"/paramrun', '']
     lcmd = '\n'.join(lcmd).format(outdir=str(args.outdir), job='docking')
     cmds.append(lcmd)
@@ -132,7 +134,13 @@ def main():
 
         if os.environ.get('SLURM_JOB_ID', ''):
             wd = vstool.mkdir(tempfile.mkdtemp(prefix='covalent.', suffix='.docking'))
-            cpus = min(multiprocessing.cpu_count() - 1, 1)
+            partition = os.environ.get('SLURM_JOB_PARTITION', 'vm-small')
+            if partition == 'vm-small':
+                cpus = 16
+            elif partition == 'gpu-a100-small':
+                cpus = 32
+            else:
+                cpus = multiprocessing.cpu_count() - 1
             try:
                 logger.debug(f'Individualizing ligands in {args.ligand}')
                 ligands = []
@@ -143,12 +151,15 @@ def main():
                         d = vstool.mkdir(wd / s.title)
                         ligands.append(s.sdf(output=d / f'{s.title}.sdf'))
                 logger.debug(f'Saved {len(ligands):,} SDF files to {wd}')
-
-                cpus = min(cpus, len(ligands))
-                logger.debug(f'Docking {len(ligands):,} ligands with {cpus} CPUs')
-                outs = vstool.parallel_cpu_task(dock, ligands, processes=cpus, chunksize=1,
-                                                receptor=str(receptor), residue=args.residue, smarts=args.smarts,
-                                                indices=args.indices)
+                
+                if ligands:
+                    cpus = min(cpus, len(ligands))
+                    logger.info(f'Docking {len(ligands):,} ligands in {args.ligand} with {cpus} CPUs')
+                    outs = vstool.parallel_cpu_task(dock, ligands, processes=cpus, chunksize=1,
+                                                    receptor=str(args.receptor), residue=args.residue, 
+                                                    smarts=args.smarts, indices=args.indices)
+                else:
+                    vstool.debug_and_exit(f'No ligands was found in {args.ligand}, no docking was performed')
 
                 logger.debug(f'Concatenating docking results to {output}')
                 n = 0
@@ -158,7 +169,7 @@ def main():
                             with open(out) as f:
                                 o.write(f.read())
                             n += 1
-                logger.debug(f'Successfully concatenated docking results for {n:,} ligands')
+                logger.info(f'Successfully concatenated docking results for {n:,} ligands')
 
             except Exception as e:
                 vstool.error_and_exit(f'Covalent docking failed due to:\n{e}\n\n{traceback.format_exc()}')

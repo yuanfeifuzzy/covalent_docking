@@ -30,13 +30,13 @@ logger = vstool.setup_logger(verbose=True)
 def main():
     output = args.wd / 'covalent.docking.sdf.gz'
     if output.exists():
-        logger.debug(f'Covalent docking result {output} already exists, skip re-processing')
+        logger.debug(f'Covalent docking results {output} already exists, skip re-processing')
     else:
-        files = f'cat {args.wd}/*.docking.sdf.gz'
-        cmder.run(f'{files} > {output}', exit_on_error=True)
+        cmder.run(f'cat {args.wd}/batch.*[0-9].docking.sdf.gz > {output}', exit_on_error=True)
         logger.debug(f'Successfully saved docking results to {output}')
         if not args.debug:
-            cmder.run(f'rm -r {files}')
+            cmder.run(f'rm {args.wd}/batch.*[0-9].docking.sdf.gz')
+            cmder.run(f'rm {args.wd}/batch.*[0-9].sdf')
 
 
 if __name__ == '__main__':
